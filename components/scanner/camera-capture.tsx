@@ -3,160 +3,186 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type ChangeEvent,
 } from "react"
-import { Camera, ImagePlus, Loader2 } from "lucide-react"
+import { Camera } from "lucide-react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
+import { prepareImageFileForScan } from "@/lib/prepare-image-for-scan"
 import { scanResultSchema } from "@/lib/scan-result"
 import { useCartStore } from "@/store/useCartStore"
 import { cn } from "@/lib/utils"
 
-export function CameraCapture({ className }: { className?: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const addItem = useCartStore((s) => s.addItem)
-
-  const [active, setActive] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
-
-  const stop = useCallback(() => {
-    const el = videoRef.current
-    if (el?.srcObject) {
-      const stream = el.srcObject as MediaStream
-      stream.getTracks().forEach((t) => t.stop())
-      el.srcObject = null
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const r = reader.result
+      if (typeof r === "string") resolve(r)
+      else reject(new Error("Could not read image as data URL."))
     }
-    setActive(false)
-  }, [])
+    reader.onerror = () => reject(new Error("Could not read image."))
+    reader.readAsDataURL(file)
+  })
+}
 
-  const start = useCallback(async () => {
-    setError(null)
+function parseScanResponse(res: Response): Promise<unknown> {
+  return res.text().then((text) => {
+    if (!text) return null
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      })
-      const el = videoRef.current
-      if (el) {
-        el.srcObject = stream
-        await el.play()
-      }
-      setActive(true)
+      return JSON.parse(text) as unknown
     } catch {
-      setError(
-        "Could not access the camera. Check permissions and try again."
+      throw new Error(
+        res.ok
+          ? "Server returned invalid data. Try again."
+          : `Scan failed (${res.status}). Check the dev server and try again.`
       )
     }
+  })
+}
+
+function scanErrorMessage(e: unknown): string {
+  const isNetworkError =
+    e instanceof TypeError &&
+    (/failed to fetch/i.test(String(e.message)) ||
+      /load failed/i.test(String(e.message)) ||
+      /networkerror/i.test(String(e.message)))
+  if (isNetworkError) {
+    return "Could not reach the server. Open the app using your PC's LAN IP (not localhost) and restart dev with npm run dev."
+  }
+  if (e instanceof Error) return e.message
+  return "Could not scan this image."
+}
+
+const FILE_INPUT_CAMERA_ID = "checkcart-file-camera-rear"
+
+const PLACEHOLDER_NAME = "Analyzing label…"
+
+export function CameraCapture({ className }: { className?: string }) {
+  const addItem = useCartStore((s) => s.addItem)
+  const updateItem = useCartStore((s) => s.updateItem)
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [clientInsecure, setClientInsecure] = useState(false)
+
+  useEffect(() => {
+    setClientInsecure(
+      typeof window !== "undefined" && !window.isSecureContext
+    )
   }, [])
 
-  useEffect(() => () => stop(), [stop])
-
-  const scanImageFile = useCallback(
-    async (file: File) => {
-      setIsScanning(true)
-      setError(null)
-      try {
-        const formData = new FormData()
-        formData.append("image", file)
-
-        const res = await fetch("/api/scan", {
-          method: "POST",
-          body: formData,
-        })
-
-        const json: unknown = await res.json()
-
-        if (!res.ok) {
-          const message =
-            typeof json === "object" &&
-            json !== null &&
-            "error" in json &&
-            typeof (json as { error: unknown }).error === "string"
-              ? (json as { error: string }).error
-              : "Scan failed. Please try again."
-          throw new Error(message)
-        }
-
-        const parsed = scanResultSchema.safeParse(json)
-        if (!parsed.success) {
-          throw new Error(
-            "Price verification failed. Please try another photo."
-          )
-        }
-
-        const { name, price } = parsed.data
-        addItem({
-          id: crypto.randomUUID(),
-          name,
-          price,
-        })
-        toast.success(`Item added: ${name}`)
-      } catch (e) {
-        const message =
-          e instanceof Error ? e.message : "Could not scan this image."
-        setError(message)
-        toast.error(message)
-      } finally {
-        setIsScanning(false)
-      }
-    },
-    [addItem]
-  )
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const handleFileChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ""
-      if (file) {
-        void scanImageFile(file)
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget
+      const file = input.files?.[0]
+      input.value = ""
+      if (!file) return
+
+      setError(null)
+
+      let upload: File
+      try {
+        upload = await prepareImageFileForScan(file)
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Could not read this photo."
+        setError(message)
+        toast.error(message)
+        return
       }
+
+      let tempImage: string
+      try {
+        tempImage = await fileToDataUrl(upload)
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Could not read this photo."
+        setError(message)
+        toast.error(message)
+        return
+      }
+
+      const tempId = crypto.randomUUID()
+      addItem({
+        id: tempId,
+        name: PLACEHOLDER_NAME,
+        price: 0,
+        quantity: 1,
+        status: "processing",
+        tempImage,
+      })
+
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+
+      const formData = new FormData()
+      formData.append("image", upload)
+
+      fetch("/api/scan", { method: "POST", body: formData })
+        .then((res) => parseScanResponse(res).then((json) => ({ res, json })))
+        .then(({ res, json }) => {
+          if (!res.ok) {
+            const message =
+              typeof json === "object" &&
+              json !== null &&
+              "error" in json &&
+              typeof (json as { error: unknown }).error === "string"
+                ? (json as { error: string }).error
+                : "Scan failed. Please try again."
+            throw new Error(message)
+          }
+          const parsed = scanResultSchema.safeParse(json)
+          if (!parsed.success) {
+            throw new Error(
+              "Price verification failed. Please try another photo."
+            )
+          }
+          const { name, price } = parsed.data
+          updateItem(tempId, {
+            name,
+            price,
+            status: "completed",
+            scannedAt: Date.now(),
+          })
+          toast.success(`Item added: ${name}`)
+        })
+        .catch((e) => {
+          const message = scanErrorMessage(e)
+          updateItem(tempId, {
+            status: "error",
+            errorMessage: message,
+            name: "Could not read price",
+          })
+          toast.error(message)
+        })
     },
-    [scanImageFile]
+    [addItem, updateItem]
   )
 
-  const captureFromVideo = useCallback(() => {
-    const video = videoRef.current
-    if (!video || video.videoWidth === 0) {
-      setError("Camera is not ready yet. Wait a moment and try again.")
-      return
-    }
-
-    const canvas = document.createElement("canvas")
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const ctx = canvas.getContext("2d")
-    if (!ctx) {
-      setError("Could not capture from this device.")
-      return
-    }
-    ctx.drawImage(video, 0, 0)
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          setError("Could not capture image.")
-          return
-        }
-        const file = new File([blob], "capture.jpg", { type: "image/jpeg" })
-        void scanImageFile(file)
-      },
-      "image/jpeg",
-      0.92
-    )
-  }, [scanImageFile])
+  const takePictureLabelClass = cn(
+    buttonVariants({ variant: "default", size: "default" }),
+    "inline-flex cursor-pointer touch-manipulation items-center justify-center gap-1.5 shadow-sm select-none"
+  )
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <input
-        ref={fileInputRef}
+        id={FILE_INPUT_CAMERA_ID}
         type="file"
         accept="image/*"
+        capture="environment"
         className="sr-only"
-        aria-hidden
         tabIndex={-1}
         onChange={handleFileChange}
       />
@@ -166,89 +192,71 @@ export function CameraCapture({ className }: { className?: string }) {
           "relative aspect-video overflow-hidden rounded-xl border border-border bg-muted/25 shadow-sm"
         )}
       >
-        <video
-          ref={videoRef}
-          className="size-full object-cover"
-          playsInline
-          muted
-        />
-
-        {isScanning ? (
-          <div
-            className={cn(
-              "absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/90 px-4 text-center backdrop-blur-sm"
-            )}
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <Loader2
-              className="size-8 animate-spin text-primary"
-              aria-hidden
-            />
-            <p className="text-sm font-medium text-foreground">
-              Agente analisando preço...
-            </p>
-          </div>
-        ) : null}
-
-        {!active && !isScanning ? (
-          <div
-            className={cn(
-              "absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/85 px-4 text-center backdrop-blur-[2px]"
-            )}
-          >
-            <div className="flex size-12 items-center justify-center rounded-full border border-border bg-card shadow-sm">
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="Captured label"
+            className="size-full object-cover"
+          />
+        ) : (
+          <div className="flex size-full flex-col items-center justify-center gap-3 bg-muted/30 px-4">
+            <div className="flex size-14 items-center justify-center rounded-full border border-border bg-card shadow-sm">
               <Camera
-                className="size-6 text-muted-foreground"
+                className="size-7 text-muted-foreground"
                 strokeWidth={1.5}
                 aria-hidden
               />
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button type="button" onClick={start}>
-                Start camera
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImagePlus className="size-4" aria-hidden />
-                Upload photo
-              </Button>
-            </div>
           </div>
+        )}
+
+        {!previewUrl ? (
+          <label
+            htmlFor={FILE_INPUT_CAMERA_ID}
+            className={cn(
+              "absolute inset-0 z-10 flex cursor-pointer flex-col items-center justify-end gap-4 bg-transparent px-4 pb-8 pt-16 touch-manipulation"
+            )}
+          >
+            <span className={takePictureLabelClass}>
+              <Camera className="size-4" aria-hidden />
+              Take picture
+            </span>
+          </label>
+        ) : null}
+
+        {previewUrl ? (
+          <label
+            htmlFor={FILE_INPUT_CAMERA_ID}
+            className={cn(
+              "absolute inset-x-0 bottom-0 z-10 flex cursor-pointer justify-center bg-gradient-to-t from-background/90 to-transparent px-4 pb-4 pt-12 touch-manipulation"
+            )}
+          >
+            <span
+              className={cn(
+                buttonVariants({ variant: "secondary", size: "default" }),
+                "shadow-sm"
+              )}
+            >
+              <Camera className="size-4" aria-hidden />
+              Take another picture
+            </span>
+          </label>
         ) : null}
       </div>
+
+      {clientInsecure ? (
+        <p className="text-center text-xs leading-snug text-muted-foreground">
+          On some phones, <strong className="font-medium text-foreground">http://</strong>{" "}
+          to your computer may block the camera. Use{" "}
+          <strong className="font-medium text-foreground">https://</strong> or a tunnel if
+          nothing happens when you tap.
+        </p>
+      ) : null}
 
       {error ? (
         <p className="text-center text-sm text-destructive" role="status">
           {error}
         </p>
-      ) : null}
-
-      {active ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Button
-            type="button"
-            onClick={captureFromVideo}
-            disabled={isScanning}
-          >
-            Capture &amp; scan
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={isScanning}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <ImagePlus className="size-4" aria-hidden />
-            Upload image
-          </Button>
-          <Button type="button" variant="outline" onClick={stop}>
-            Stop camera
-          </Button>
-        </div>
       ) : null}
     </div>
   )
