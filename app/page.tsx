@@ -32,7 +32,7 @@ export default function Home() {
 
       <footer className="mt-auto border-t border-border/60 py-6">
         <p className="text-center text-xs text-muted-foreground">
-          AI-Powered Price Verification
+          Incart — AI-powered price verification
         </p>
       </footer>
     </div>

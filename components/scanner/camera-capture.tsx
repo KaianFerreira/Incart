@@ -56,7 +56,7 @@ function scanErrorMessage(e: unknown): string {
   return "Could not scan this image."
 }
 
-const FILE_INPUT_CAMERA_ID = "checkcart-file-camera-rear"
+const FILE_INPUT_CAMERA_ID = "incart-file-camera-rear"
 
 const PLACEHOLDER_NAME = "Analyzing label…"
 
