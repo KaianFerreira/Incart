@@ -5,18 +5,6 @@ import { criticResultSchema, extractorResultSchema } from "@/lib/scan-result"
 
 export type AuditedScanResult = z.infer<typeof criticResultSchema>
 
-const EXTRACTOR_SYSTEM_PROMPT = `You are a High-Precision Vision OCR Agent specialized in Brazilian supermarkets.
-
-Identify all pricing structures present in the image. Return a list of objects with { value, type, description }:
-- value: positive JSON float; use a period as the decimal separator. In Brazil, labels use commas (e.g. R$ 12,49 → 12.49). Be extremely careful not to merge numbers—e.g. 12,49 and 9,99 are two separate prices and must appear as two separate objects in the list.
-- type: exactly one of VAREJO (standard single-unit retail), ATACADO_UNIT (wholesale / bulk per-unit), TOTAL_FARDO (total for the multipack or case—not the single retail unit).
-- description: short text from the label for that row (e.g. "Varejo", "Atacado", "Leve 4 Pague 3").
-
-Also extract product_name (full visible product text—if the label reads "ÁGUA SANITÁRIA COM CLORO ATIVO", match it precisely), unit (e.g. 1L, 500g, pacote 5un; "" if illegible), and currency always "BRL".
-
-STRICT OUTPUT: Return exactly one JSON object and nothing else—no markdown, no code fences, no commentary. Shape:
-{"product_name":"string","unit":"string","currency":"BRL","pricing":[{"value":number,"type":"VAREJO"|"ATACADO_UNIT"|"TOTAL_FARDO","description":"string"}]}`
-
 const CRITIC_SYSTEM_PROMPT = `You are a cart synchronization expert. Your goal is to find the STANDARD UNIT RETAIL PRICE.
 
 You receive JSON from the vision extractor: product_name, unit, currency, and pricing (an array of { value, type, description }).
@@ -87,11 +75,12 @@ export function parseAssistantJsonObject(raw: string): unknown {
   return JSON.parse(candidate.slice(start, end + 1)) as unknown
 }
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514"
+const DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
 
 export async function runBrazilRetailScan(
   image: Blob,
   client: Anthropic,
+  extractorSystemPrompt: string,
   model: string = DEFAULT_MODEL
 ): Promise<AuditedScanResult> {
   const bytes = new Uint8Array(await image.arrayBuffer())
@@ -106,7 +95,7 @@ export async function runBrazilRetailScan(
   const extractResponse = await client.messages.create({
     model,
     max_tokens: 2048,
-    system: EXTRACTOR_SYSTEM_PROMPT,
+    system: extractorSystemPrompt,
     messages: [
       {
         role: "user",
@@ -121,7 +110,7 @@ export async function runBrazilRetailScan(
           },
           {
             type: "text",
-            text: "Extract all distinct price lines and product data from this Brazilian label. Output only the JSON object.",
+            text: "Read the SHELF price tag (not bottle/brand artwork). Extract all distinct price lines and product data. Output only the JSON object.",
           },
         ],
       },
@@ -188,14 +177,6 @@ export async function runBrazilRetailScan(
       "CRITIC_VALIDATION"
     )
   }
-
-  console.info("[api/scan] Critic context handoff", {
-    product_name: audited.data.product_name,
-    price: audited.data.price,
-    confidence: audited.data.confidence,
-    reasoning: audited.data.reasoning,
-    analysis_log: audited.data.analysis_log,
-  })
 
   return audited.data
 }

@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# scan debug output (written by /api/scan in development)
+/public/last-crop.jpg
+
 # debug
 npm-debug.log*
 yarn-debug.log*
