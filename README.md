@@ -1,6 +1,6 @@
 # **Incart: Multi-Agent Edge Auditor**
 
-> **Shelf-to-cart price verification for Brazilian retail—real-time alignment between what the label says and what the shopper pays.**
+> **Shelf-to-cart price verification for Brazilian retail real-time alignment between what the label says and what the shopper pays.**
 
 Incart is a vision-first pipeline that treats every scan as an auditable event, not a black-box prediction.
 
