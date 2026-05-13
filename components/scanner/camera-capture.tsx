@@ -13,6 +13,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { prepareImageFileForScan } from "@/lib/prepare-image-for-scan"
 import { scanResultSchema } from "@/lib/scan-result"
 import { useCartStore } from "@/store/useCartStore"
+import { useSettingsStore } from "@/store/useSettingsStore"
 import { cn } from "@/lib/utils"
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -58,11 +59,12 @@ function scanErrorMessage(e: unknown): string {
 
 const FILE_INPUT_CAMERA_ID = "incart-file-camera-rear"
 
-const PLACEHOLDER_NAME = "Analyzing label…"
+const PLACEHOLDER_NAME = "Analyzing label..."
 
 export function CameraCapture({ className }: { className?: string }) {
   const addItem = useCartStore((s) => s.addItem)
   const updateItem = useCartStore((s) => s.updateItem)
+  const apiKey = useSettingsStore((s) => s.apiKey)
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +131,10 @@ export function CameraCapture({ className }: { className?: string }) {
       const formData = new FormData()
       formData.append("image", upload)
 
-      fetch("/api/scan", { method: "POST", body: formData })
+      const headers: HeadersInit = {}
+      if (apiKey) headers["X-Api-Key"] = apiKey
+
+      fetch("/api/scan", { method: "POST", headers, body: formData })
         .then((res) => parseScanResponse(res).then((json) => ({ res, json })))
         .then(({ res, json }) => {
           if (!res.ok) {
@@ -167,7 +172,7 @@ export function CameraCapture({ className }: { className?: string }) {
           toast.error(message)
         })
     },
-    [addItem, updateItem]
+    [addItem, updateItem, apiKey]
   )
 
   const takePictureLabelClass = cn(
@@ -246,10 +251,11 @@ export function CameraCapture({ className }: { className?: string }) {
 
       {clientInsecure ? (
         <p className="text-center text-xs leading-snug text-muted-foreground">
-          On some phones, <strong className="font-medium text-foreground">http://</strong>{" "}
+          On some phones,{" "}
+          <strong className="font-medium text-foreground">http://</strong>{" "}
           to your computer may block the camera. Use{" "}
-          <strong className="font-medium text-foreground">https://</strong> or a tunnel if
-          nothing happens when you tap.
+          <strong className="font-medium text-foreground">https://</strong>{" "}
+          or a tunnel if nothing happens when you tap.
         </p>
       ) : null}
 

@@ -56,14 +56,17 @@ STRICT OUTPUT: Return exactly one JSON object and nothing else—no markdown, no
  */
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+    // Prefer the key sent by the client (user-configured); fall back to server env var.
+    const headerKey = request.headers.get("X-Api-Key")?.trim()
+    const apiKey = headerKey || process.env.ANTHROPIC_API_KEY?.trim()
+
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "Server misconfiguration: ANTHROPIC_API_KEY is missing or empty. Set it in .env.local (e.g. ANTHROPIC_API_KEY=sk-ant-...), restart `next dev`, and confirm the key at https://console.anthropic.com/. Never commit API keys.",
+            "No API key provided. Enter your Anthropic API key in the app settings to continue.",
         },
-        { status: 500 }
+        { status: 401 }
       )
     }
 
