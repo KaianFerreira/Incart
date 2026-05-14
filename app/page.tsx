@@ -22,7 +22,14 @@ export default function Home() {
   if (!hydrated) return null
 
   if (!apiKey) {
-    return <ApiKeySetup />
+    return (
+      <div className="flex min-h-full flex-col bg-background">
+        <div className="flex justify-end px-4 pt-4">
+          <LocaleToggle />
+        </div>
+        <ApiKeySetup />
+      </div>
+    )
   }
 
   return (
