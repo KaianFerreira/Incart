@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  basePath: "/apps/incart",
   allowedDevOrigins: ["kooky-unabashed-rice.ngrok-free.dev"],
 };
 
