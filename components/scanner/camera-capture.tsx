@@ -14,6 +14,7 @@ import { prepareImageFileForScan } from "@/lib/prepare-image-for-scan"
 import { scanResultSchema } from "@/lib/scan-result"
 import { useCartStore } from "@/store/useCartStore"
 import { useSettingsStore } from "@/store/useSettingsStore"
+import { useTranslation } from "@/lib/i18n/useTranslation"
 import { cn } from "@/lib/utils"
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -59,12 +60,12 @@ function scanErrorMessage(e: unknown): string {
 
 const FILE_INPUT_CAMERA_ID = "incart-file-camera-rear"
 
-const PLACEHOLDER_NAME = "Analyzing label..."
-
 export function CameraCapture({ className }: { className?: string }) {
   const addItem = useCartStore((s) => s.addItem)
   const updateItem = useCartStore((s) => s.updateItem)
   const apiKey = useSettingsStore((s) => s.apiKey)
+  const locale = useSettingsStore((s) => s.locale)
+  const { t } = useTranslation()
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -95,8 +96,7 @@ export function CameraCapture({ className }: { className?: string }) {
       try {
         upload = await prepareImageFileForScan(file)
       } catch (e) {
-        const message =
-          e instanceof Error ? e.message : "Could not read this photo."
+        const message = e instanceof Error ? e.message : "Could not read this photo."
         setError(message)
         toast.error(message)
         return
@@ -106,8 +106,7 @@ export function CameraCapture({ className }: { className?: string }) {
       try {
         tempImage = await fileToDataUrl(upload)
       } catch (e) {
-        const message =
-          e instanceof Error ? e.message : "Could not read this photo."
+        const message = e instanceof Error ? e.message : "Could not read this photo."
         setError(message)
         toast.error(message)
         return
@@ -116,7 +115,7 @@ export function CameraCapture({ className }: { className?: string }) {
       const tempId = crypto.randomUUID()
       addItem({
         id: tempId,
-        name: PLACEHOLDER_NAME,
+        name: t.camera.analyzingLabel,
         price: 0,
         quantity: 1,
         status: "processing",
@@ -133,6 +132,7 @@ export function CameraCapture({ className }: { className?: string }) {
 
       const headers: HeadersInit = {}
       if (apiKey) headers["X-Api-Key"] = apiKey
+      headers["X-Locale"] = locale
 
       fetch("/api/scan", { method: "POST", headers, body: formData })
         .then((res) => parseScanResponse(res).then((json) => ({ res, json })))
@@ -149,30 +149,29 @@ export function CameraCapture({ className }: { className?: string }) {
           }
           const parsed = scanResultSchema.safeParse(json)
           if (!parsed.success) {
-            throw new Error(
-              "Price verification failed. Please try another photo."
-            )
+            throw new Error("Price verification failed. Please try another photo.")
           }
-          const { name, price } = parsed.data
+          const { name, price, category } = parsed.data
           updateItem(tempId, {
             name,
             price,
+            category,
             status: "completed",
             scannedAt: Date.now(),
           })
-          toast.success(`Item added: ${name}`)
+          toast.success(`${name}`)
         })
         .catch((e) => {
           const message = scanErrorMessage(e)
           updateItem(tempId, {
             status: "error",
             errorMessage: message,
-            name: "Could not read price",
+            name: t.camera.couldNotReadPrice,
           })
           toast.error(message)
         })
     },
-    [addItem, updateItem, apiKey]
+    [addItem, updateItem, apiKey, locale, t]
   )
 
   const takePictureLabelClass = cn(
@@ -192,25 +191,13 @@ export function CameraCapture({ className }: { className?: string }) {
         onChange={handleFileChange}
       />
 
-      <div
-        className={cn(
-          "relative aspect-video overflow-hidden rounded-xl border border-border bg-muted/25 shadow-sm"
-        )}
-      >
+      <div className={cn("relative aspect-video overflow-hidden rounded-xl border border-border bg-muted/25 shadow-sm")}>
         {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt="Captured label"
-            className="size-full object-cover"
-          />
+          <img src={previewUrl} alt="Captured label" className="size-full object-cover" />
         ) : (
           <div className="flex size-full flex-col items-center justify-center gap-3 bg-muted/30 px-4">
             <div className="flex size-14 items-center justify-center rounded-full border border-border bg-card shadow-sm">
-              <Camera
-                className="size-7 text-muted-foreground"
-                strokeWidth={1.5}
-                aria-hidden
-              />
+              <Camera className="size-7 text-muted-foreground" strokeWidth={1.5} aria-hidden />
             </div>
           </div>
         )}
@@ -218,13 +205,11 @@ export function CameraCapture({ className }: { className?: string }) {
         {!previewUrl ? (
           <label
             htmlFor={FILE_INPUT_CAMERA_ID}
-            className={cn(
-              "absolute inset-0 z-10 flex cursor-pointer flex-col items-center justify-end gap-4 bg-transparent px-4 pb-8 pt-16 touch-manipulation"
-            )}
+            className="absolute inset-0 z-10 flex cursor-pointer flex-col items-center justify-end gap-4 bg-transparent px-4 pb-8 pt-16 touch-manipulation"
           >
             <span className={takePictureLabelClass}>
               <Camera className="size-4" aria-hidden />
-              Take picture
+              {t.camera.takePicture}
             </span>
           </label>
         ) : null}
@@ -232,18 +217,11 @@ export function CameraCapture({ className }: { className?: string }) {
         {previewUrl ? (
           <label
             htmlFor={FILE_INPUT_CAMERA_ID}
-            className={cn(
-              "absolute inset-x-0 bottom-0 z-10 flex cursor-pointer justify-center bg-gradient-to-t from-background/90 to-transparent px-4 pb-4 pt-12 touch-manipulation"
-            )}
+            className="absolute inset-x-0 bottom-0 z-10 flex cursor-pointer justify-center bg-gradient-to-t from-background/90 to-transparent px-4 pb-4 pt-12 touch-manipulation"
           >
-            <span
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "default" }),
-                "shadow-sm"
-              )}
-            >
+            <span className={cn(buttonVariants({ variant: "secondary", size: "default" }), "shadow-sm")}>
               <Camera className="size-4" aria-hidden />
-              Take another picture
+              {t.camera.takeAnother}
             </span>
           </label>
         ) : null}
@@ -251,18 +229,12 @@ export function CameraCapture({ className }: { className?: string }) {
 
       {clientInsecure ? (
         <p className="text-center text-xs leading-snug text-muted-foreground">
-          On some phones,{" "}
-          <strong className="font-medium text-foreground">http://</strong>{" "}
-          to your computer may block the camera. Use{" "}
-          <strong className="font-medium text-foreground">https://</strong>{" "}
-          or a tunnel if nothing happens when you tap.
+          {t.camera.insecureWarning}
         </p>
       ) : null}
 
       {error ? (
-        <p className="text-center text-sm text-destructive" role="status">
-          {error}
-        </p>
+        <p className="text-center text-sm text-destructive" role="status">{error}</p>
       ) : null}
     </div>
   )

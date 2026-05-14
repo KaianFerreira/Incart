@@ -70,6 +70,12 @@ export async function POST(request: Request) {
       )
     }
 
+    const locale = request.headers.get("X-Locale") === "en" ? "en" : "pt"
+    const languageInstruction =
+      locale === "en"
+        ? "IMPORTANT: Translate product_name to English. If the name is already in English keep it; otherwise provide a natural English translation (e.g. 'Arroz' -> 'Rice', 'Leite Integral' -> 'Whole Milk')."
+        : "IMPORTANTE: Escreva product_name em portugues brasileiro."
+
     const anthropic = new Anthropic({ apiKey })
 
     const formData = await request.formData()
@@ -103,11 +109,14 @@ export async function POST(request: Request) {
       type: "image/jpeg",
     })
 
+    const extractorPromptWithLocale = EXTRACTOR_SYSTEM_PROMPT + "\n\n" + languageInstruction
+
     const audited = await runBrazilRetailScan(
       croppedBlob,
       anthropic,
-      EXTRACTOR_SYSTEM_PROMPT,
-      EXTRACTOR_MODEL
+      extractorPromptWithLocale,
+      EXTRACTOR_MODEL,
+      languageInstruction
     )
     const payload = toClientScanPayload(audited)
     const validated = ScannedProductSchema.safeParse(payload)

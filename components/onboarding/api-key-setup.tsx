@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react"
 import { ShoppingCart, ExternalLink, KeyRound, AlertCircle } from "lucide-react"
 import { useSettingsStore } from "@/store/useSettingsStore"
+import { useTranslation } from "@/lib/i18n/useTranslation"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
@@ -12,6 +13,7 @@ function isValidKeyFormat(key: string): boolean {
 
 export function ApiKeySetup() {
   const setApiKey = useSettingsStore((s) => s.setApiKey)
+  const { t } = useTranslation()
   const [input, setInput] = useState("")
   const [error, setError] = useState<string | null>(null)
 
@@ -19,11 +21,11 @@ export function ApiKeySetup() {
     e.preventDefault()
     const trimmed = input.trim()
     if (!trimmed) {
-      setError("Please enter your API key.")
+      setError(t.onboarding.apiKeyErrorEmpty)
       return
     }
     if (!isValidKeyFormat(trimmed)) {
-      setError("Key should start with sk-ant-… — double-check it from console.anthropic.com.")
+      setError(t.onboarding.apiKeyErrorFormat)
       return
     }
     setError(null)
@@ -34,33 +36,29 @@ export function ApiKeySetup() {
     <div className="flex min-h-full flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-8">
 
-        {/* Logo + title */}
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex size-14 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
             <ShoppingCart className="size-7 text-foreground" strokeWidth={1.5} aria-hidden />
           </div>
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome to CheckCart
+              {t.onboarding.title}
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Point your camera at any shelf price tag. The AI reads and logs
-              the price so you can compare before you reach the checkout.
+              {t.onboarding.description}
             </p>
           </div>
         </div>
 
-        {/* How it works */}
         <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground space-y-2">
-          <p className="font-medium text-foreground">How it works</p>
+          <p className="font-medium text-foreground">{t.onboarding.howItWorksTitle}</p>
           <ol className="list-decimal list-inside space-y-1 leading-relaxed">
-            <li>Snap a photo of a shelf label in the supermarket.</li>
-            <li>Two AI agents extract and verify the price from the image.</li>
-            <li>The item is added to your in-app cart for easy comparison.</li>
+            <li>{t.onboarding.step1}</li>
+            <li>{t.onboarding.step2}</li>
+            <li>{t.onboarding.step3}</li>
           </ol>
         </div>
 
-        {/* Key input form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label
@@ -68,14 +66,14 @@ export function ApiKeySetup() {
               className="flex items-center gap-1.5 text-sm font-medium text-foreground"
             >
               <KeyRound className="size-3.5" aria-hidden />
-              Your Anthropic API key
+              {t.onboarding.apiKeyLabel}
             </label>
             <input
               id="api-key-input"
               type="password"
               autoComplete="off"
               spellCheck={false}
-              placeholder="sk-ant-…"
+              placeholder={t.onboarding.apiKeyPlaceholder}
               value={input}
               onChange={(e) => {
                 setInput(e.target.value)
@@ -95,15 +93,14 @@ export function ApiKeySetup() {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Your key is stored only in your browser and never sent to our
-              servers — it goes directly to Anthropic.{" "}
+              {t.onboarding.apiKeyHelper}{" "}
               <a
                 href="https://console.anthropic.com/settings/keys"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-foreground"
               >
-                Get a key
+                {t.onboarding.apiKeyGetLink}
                 <ExternalLink className="size-3" aria-hidden />
               </a>
             </p>
@@ -111,12 +108,9 @@ export function ApiKeySetup() {
 
           <button
             type="submit"
-            className={cn(
-              buttonVariants({ variant: "default", size: "default" }),
-              "w-full"
-            )}
+            className={cn(buttonVariants({ variant: "default", size: "default" }), "w-full")}
           >
-            Save key &amp; get started
+            {t.onboarding.apiKeySave}
           </button>
         </form>
       </div>

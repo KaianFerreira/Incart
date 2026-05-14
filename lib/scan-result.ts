@@ -24,6 +24,19 @@ export const extractorResultSchema = z.object({
   pricing: z.array(pricingStructureSchema).min(1),
 })
 
+const CATEGORY_ENUM = [
+  "LATICINIOS",
+  "BEBIDAS",
+  "HORTIFRUTI",
+  "CARNES",
+  "PADARIA",
+  "HIGIENE",
+  "LIMPEZA",
+  "CONGELADOS",
+  "MERCEARIA",
+  "OUTROS",
+] as const
+
 /** Strict output from Agent 2 (Critic / Resolver) after Zod validation. */
 export const criticResultSchema = z.object({
   product_name: z.string().min(1),
@@ -32,6 +45,8 @@ export const criticResultSchema = z.object({
   unit: z.string().optional().default(""),
   currency: z.literal("BRL"),
   confidence: z.enum(["high", "low"]),
+  /** Product category for spending breakdown. */
+  category: z.enum(CATEGORY_ENUM).default("OUTROS"),
   /** Audit trail for logs / context handoff (not sent to the client). */
   reasoning: z.string().min(1),
   /** Resolver narrative: Varejo vs atacado vs total fardo (not sent to the client). */
@@ -45,6 +60,7 @@ export const ScannedProductSchema = z.object({
   unit: z.string().optional(),
   currency: z.literal("BRL").optional(),
   confidence: z.enum(["high", "low"]).optional(),
+  category: z.enum(CATEGORY_ENUM).optional(),
 })
 
 /** Same schema as `ScannedProductSchema` (client bundle). */
@@ -61,5 +77,6 @@ export function toClientScanPayload(
     unit: audited.unit || undefined,
     currency: audited.currency,
     confidence: audited.confidence,
+    category: audited.category,
   }
 }

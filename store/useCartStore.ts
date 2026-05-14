@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { Category } from "@/lib/categories"
 
 export type CartItemStatus = "processing" | "completed" | "error"
 
@@ -12,6 +13,8 @@ export type CartItem = {
   status: CartItemStatus
   /** Base64 data URL of the captured label */
   tempImage: string
+  /** AI-assigned product category */
+  category?: Category
   /** Set when status is error */
   errorMessage?: string
   /** When the scan finished successfully (Unix ms, client clock) */
@@ -26,6 +29,7 @@ export type CartItemUpdate = Partial<
     | "quantity"
     | "status"
     | "tempImage"
+    | "category"
     | "errorMessage"
     | "scannedAt"
   >
@@ -33,14 +37,18 @@ export type CartItemUpdate = Partial<
 
 type CartState = {
   items: CartItem[]
+  /** Shopping session budget target in BRL, null if not set */
+  budgetTarget: number | null
   addItem: (item: CartItem) => void
   updateItem: (id: string, patch: CartItemUpdate) => void
   removeItem: (id: string) => void
   clearCart: () => void
+  setBudgetTarget: (value: number | null) => void
 }
 
 export const useCartStore = create<CartState>((set) => ({
   items: [],
+  budgetTarget: null,
   addItem: (item) =>
     set((state) => ({
       items: [...state.items, item],
@@ -56,4 +64,5 @@ export const useCartStore = create<CartState>((set) => ({
       items: state.items.filter((item) => item.id !== id),
     })),
   clearCart: () => set({ items: [] }),
+  setBudgetTarget: (value) => set({ budgetTarget: value }),
 }))

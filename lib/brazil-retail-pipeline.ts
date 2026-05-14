@@ -5,7 +5,7 @@ import { criticResultSchema, extractorResultSchema } from "@/lib/scan-result"
 
 export type AuditedScanResult = z.infer<typeof criticResultSchema>
 
-const CRITIC_SYSTEM_PROMPT = `You are a cart synchronization expert. Your goal is to find the STANDARD UNIT RETAIL PRICE.
+const CRITIC_SYSTEM_PROMPT = `You are a cart synchronization expert. Your goal is to find the STANDARD UNIT RETAIL PRICE and classify the product category.
 
 You receive JSON from the vision extractor: product_name, unit, currency, and pricing (an array of { value, type, description }).
 
@@ -15,13 +15,15 @@ Rules:
 - Avoid using TOTAL_FARDO as the cart line price when it represents the case total (e.g. 59,94 for the fardo)—unless the label clearly indicates that is the only applicable retail display; prefer VAREJO for standard unit retail.
 - Populate analysis_log with explicit reasoning: list which price points you saw (values and types), which one you chose for the cart, and why you ignored wholesale/bulk or total-fardo amounts.
 - Also set reasoning to a concise operator-facing summary (OCR plausibility, category checks, any corrections). If a basic cleaning product shows an absurd retail price likely from OCR, correct it and set confidence to "low"; otherwise use your judgment for high vs low.
+- Set category to exactly one of: LATICINIOS (milk, cheese, butter, yogurt), BEBIDAS (water, juice, soda, beer, wine), HORTIFRUTI (fruits, vegetables, greens), CARNES (meat, chicken, fish, cold cuts), PADARIA (bread, cakes, biscuits), HIGIENE (soap, shampoo, toothpaste, deodorant), LIMPEZA (detergent, bleach, fabric softener, cleaning products), CONGELADOS (frozen food, ice cream), MERCEARIA (rice, beans, pasta, oil, flour, sugar, canned goods), OUTROS (anything that does not fit above).
 
 STRICT OUTPUT: Return exactly one JSON object and nothing else—no markdown, no code fences, no commentary. Shape:
-{"product_name":"string","price":number,"unit":"string","currency":"BRL","confidence":"high"|"low","reasoning":"string","analysis_log":"string"}
+{"product_name":"string","price":number,"unit":"string","currency":"BRL","confidence":"high"|"low","category":"LATICINIOS"|"BEBIDAS"|"HORTIFRUTI"|"CARNES"|"PADARIA"|"HIGIENE"|"LIMPEZA"|"CONGELADOS"|"MERCEARIA"|"OUTROS","reasoning":"string","analysis_log":"string"}
 
 - price: single float—the standard unit retail price for the frontend.
 - currency must be "BRL".
 - confidence: "high" or "low" only.
+- category: must be exactly one of the values above.
 - analysis_log: must explain the Varejo vs Atacado vs Total Fardo decision (not empty).`
 
 export class ScanPipelineError extends Error {
@@ -81,7 +83,8 @@ export async function runBrazilRetailScan(
   image: Blob,
   client: Anthropic,
   extractorSystemPrompt: string,
-  model: string = DEFAULT_MODEL
+  model: string = DEFAULT_MODEL,
+  languageInstruction: string = ""
 ): Promise<AuditedScanResult> {
   const bytes = new Uint8Array(await image.arrayBuffer())
   const buffer = Buffer.from(bytes)
@@ -139,10 +142,14 @@ export async function runBrazilRetailScan(
     )
   }
 
+  const criticSystemPrompt = languageInstruction
+    ? CRITIC_SYSTEM_PROMPT + "\n\n" + languageInstruction
+    : CRITIC_SYSTEM_PROMPT
+
   const criticResponse = await client.messages.create({
     model,
     max_tokens: 2048,
-    system: CRITIC_SYSTEM_PROMPT,
+    system: criticSystemPrompt,
     messages: [
       {
         role: "user",
