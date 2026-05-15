@@ -100,10 +100,7 @@ export async function POST(request: Request) {
       throw e
     }
 
-    await writeFile(
-      join(process.cwd(), "public", "last-crop.jpg"),
-      croppedBuffer
-    )
+    await writeFile(join("/tmp", "last-crop.jpg"), croppedBuffer)
 
     const croppedBlob = new Blob([new Uint8Array(croppedBuffer)], {
       type: "image/jpeg",
