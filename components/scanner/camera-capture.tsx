@@ -134,7 +134,7 @@ export function CameraCapture({ className }: { className?: string }) {
       if (apiKey) headers["X-Api-Key"] = apiKey
       headers["X-Locale"] = locale
 
-      fetch("/api/scan", { method: "POST", headers, body: formData })
+      fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/scan`, { method: "POST", headers, body: formData })
         .then((res) => parseScanResponse(res).then((json) => ({ res, json })))
         .then(({ res, json }) => {
           if (!res.ok) {
